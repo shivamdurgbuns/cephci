@@ -5,9 +5,9 @@ import traceback
 
 from ceph.ceph_admin import CephAdmin
 from ceph.rados.core_workflows import RadosOrchestrator
-from ceph.rados.utils import get_cluster_timestamp
-from tests.rados.monitor_configurations import MonConfigMethods
+from tests.rados.rados_test_util import create_pools, get_slow_requests_log
 from utility.log import Log
+from utility.utils import method_should_succeed, should_not_be_empty
 
 log = Log(__name__)
 
@@ -41,43 +41,21 @@ def run(ceph_cluster, **kw):
         start_time, err = installer.exec_command(
             cmd="sudo date -u '+%Y-%m-%d %H:%M:%S'"
         )
-        rados_obj.bench_write(
-            pool_name=_pool_name,
-            verify_stats=False,
-            background=True,
-            rados_write_duration=300,
-            byte_size=config["byte_size"],
-        )
-        time.sleep(10)
-        rados_obj.bench_read(
-            pool_name=_pool_name, rados_read_duration=300, background=True
-        )
+        osd_nodes = ceph_cluster.get_nodes(role="osd")
 
-        slow_ops_frequency = {}
-        endtime = datetime.datetime.now() + datetime.timedelta(seconds=240)
-        while datetime.datetime.now() < endtime:
-            health_detail = rados_obj.run_ceph_command(
-                cmd="ceph health detail", client_exec=True
-            )
-            slow_ops_msg = None
-            slow_ops_dict = health_detail.get("checks").get("SLOW_OPS")
-            if slow_ops_dict:
-                log.info("Slow Ops request found in ceph health detail")
-                log.info("Proceeding to update OSD list with frequency")
-                slow_ops_msg = slow_ops_dict.get("summary").get("message")
-                log.info(slow_ops_msg)
-            if slow_ops_msg:
-                daemon_str = re.search(r"daemons \[([^\]]+)\]", slow_ops_msg)
-                if daemon_str:
-                    daemon_list = daemon_str.group(1).split(",")
-                    log.info("Slow Ops daemons: %s" % daemon_list)
-                    for _id in daemon_list:
-                        slow_ops_frequency[_id] = (
-                            slow_ops_frequency[_id] + 1
-                            if slow_ops_frequency.get(_id)
-                            else 1
-                        )
-            time.sleep(10)
+        pool = create_pools(config, rados_obj, client_node)
+        should_not_be_empty(pool, "Failed to retrieve pool details")
+        pools = config.get("create_pools")
+        for each_pool in pools:
+            cr_pool = each_pool["create_pool"]
+            osd_services = rados_obj.list_orch_services(service_type="osd")
+            for service in osd_services:
+                client_node.exec_command(cmd=f"ceph orch restart {service}", sudo=True)
+            for node in osd_nodes:
+                log.info(f"Rebooting node : {node.hostname}")
+                node.exec_command(sudo=True, cmd="reboot", check_ec=False)
+            method_should_succeed(rados_obj.bench_write, **cr_pool)
+        rados_obj.change_recovery_threads(config=pool, action="set")
 
         end_time, err = installer.exec_command(cmd="sudo date -u '+%Y-%m-%d %H:%M:%S'")
         if not slow_ops_frequency:
