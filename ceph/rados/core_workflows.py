@@ -3404,7 +3404,7 @@ EOF"""
         log.error(f"Pool ID {pool_id} not found in 'ceph pg dump pools' output")
         raise KeyError(f"Pool ID {pool_id} not found in 'ceph pg dump pools' output")
 
-    def restart_daemon_services(self, daemon: str, timeout: int = 600):
+    def restart_daemon_services(self, daemon: str, timeout: int = 300):
         """Module to restart all Orchestrator services belonging to the input
         daemon.
         Args:
