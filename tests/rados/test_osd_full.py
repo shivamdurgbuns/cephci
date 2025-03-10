@@ -205,15 +205,6 @@ def run(ceph_cluster, **kw):
                     "max_objs": max_obj_nearfull,
                 }
 
-                if (
-                    rados_obj.bench_write(
-                        pool_name=pool_name, **nearfull_config, verify_stats=False
-                    )
-                    is False
-                ):
-                    err_msg = f"Error running rados bench using nearfull_config: {nearfull_config}"
-                    raise Exception(err_msg)
-
                 assert rados_obj.verify_pool_stats(
                     pool_name=pool_name, exp_objs=max_obj_nearfull
                 )
@@ -236,15 +227,6 @@ def run(ceph_cluster, **kw):
                     "nocleanup": True,
                     "max_objs": subseq_obj_backfillfull,
                 }
-
-                if (
-                    rados_obj.bench_write(
-                        pool_name=pool_name, **backfillfull_config, verify_stats=False
-                    )
-                    is False
-                ):
-                    err_msg = f"Error running rados bench using backfillfull_config: {backfillfull_config}"
-                    raise Exception(err_msg)
 
                 _exp_objs = max_obj_nearfull + subseq_obj_backfillfull
                 assert rados_obj.verify_pool_stats(
@@ -487,14 +469,7 @@ def run(ceph_cluster, **kw):
                     "max-objects": full_objs,
                     "check_ec": False,
                 }
-                try:
-                    bench_obj.write(
-                        client=client_node, pool_name=pool_name, **full_config
-                    )
-                except (SocketTimeoutException, TimeoutException):
-                    log.warning(
-                        "rados bench socket Timeout because OSD(s) are full - Expected"
-                    )
+                bench_obj.write(client=client_node, pool_name=pool_name, **full_config)
 
                 assert rados_obj.verify_pool_stats(
                     pool_name=pool_name, exp_objs=full_objs
