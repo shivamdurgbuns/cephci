@@ -4,13 +4,11 @@ Tests included:
 1. Bug 2335317 - multiple OSDs crashing while replaying bluefs -- ceph_assert(delta.offset == fnode.allocated)
 """
 
-import datetime
 import time
 
 from ceph.ceph_admin import CephAdmin
 from ceph.rados.bluestoretool_workflows import BluestoreToolWorkflows
 from ceph.rados.core_workflows import RadosOrchestrator
-from ceph.rados.utils import get_cluster_timestamp
 from tests.rados.monitor_configurations import MonConfigMethods
 from utility.log import Log
 
@@ -65,9 +63,6 @@ def run(ceph_cluster, **kw):
         _config = config.get("verify_allocator_corruption")
         pool_cfg = config.get("pool_config", {})
         pool_name = pool_cfg.get("pool_name", "osd-alloc-pool")
-        ino_lines = []
-        start_time = get_cluster_timestamp(rados_obj.node)
-        log.debug(f"Test workflow started. Start time: {start_time}")
         try:
             if _config.get("issue_reproduction"):
                 log.info(
@@ -88,24 +83,12 @@ def run(ceph_cluster, **kw):
                 time.sleep(5)
 
                 # ensure acting set is same as before
-                endtime = datetime.datetime.now() + datetime.timedelta(seconds=180)
-                while datetime.datetime.now() < endtime:
-                    new_acting_set = rados_obj.get_pg_acting_set(pool_name=pool_name)
-                    log.debug(
-                        "Acting set for pool %s after switching OSD device class: %s"
-                        % (pool_name, new_acting_set)
-                    )
-                    if acting_set == new_acting_set:
-                        break
-                    log.error("Acting set has changed, retrying after 20 secs")
-                    time.sleep(20)
-                else:
-                    log.error(
-                        "Acting set for pool %s has changed.\n"
-                        "Old acting set: %s | New acting set: %s"
-                        % (pool_name, acting_set, new_acting_set)
-                    )
-                    raise Exception("Acting set for pool %s has changed" % pool_name)
+                new_acting_set = rados_obj.get_pg_acting_set(pool_name=pool_name)
+                log.debug(
+                    "Acting set for pool %s after switching OSD device class: %s"
+                    % (pool_name, new_acting_set)
+                )
+                assert acting_set == new_acting_set, "Acting set has changed"
 
                 log.debug(
                     "Checking current value of bluestore_allocation_from_file & osd_fast_shutdown"
@@ -146,6 +129,7 @@ def run(ceph_cluster, **kw):
                     sudo=True, cmd="pip3 install docopt", long_running=True
                 )
 
+                ino_lines = []
                 obj_sizes = [4, 8, 12]
                 log.debug("Writing fragmented objects to the pool %s" % pool_name)
                 for size in obj_sizes:
@@ -213,44 +197,8 @@ def run(ceph_cluster, **kw):
                 log.info("Relevant log lines from bluefs_log_dump \n \n")
                 log.info(ino_lines)
 
-                # validation to check ceph assert during OSD restart after upgrading to RHCS 7.1z2
-            if _config.get("check_assert"):
-                # the cluster was setup for failure, now it will be upgraded to RHCS 7.1z2 which
-                # does not contain the fix, expectation if that OSD part of the acting set will
-                # error out with expected 'ceph_assert'
-                log.info(desc)
-                log.info(
-                    "\n \n Running test to verify OSD recovery in case of Allocator File corruption"
-                )
-                log.info(
-                    "now that cluster has been upgraded to the 7.1z2 build, one or more OSDs part of"
-                    "the acting set would fail with ceph_assert error upon restart\n"
-                )
-
-                # get acting set of created pool
-                acting_set = rados_obj.get_pg_acting_set(pool_name=pool_name)
-                prim_osd = acting_set[0]
-                log.debug("Acting set for pool %s : %s" % (pool_name, acting_set))
-
-                try:
-                    out = bluestore_obj.get_bluefs_log_dump(osd_id=prim_osd)
-                    log.info("Output of ceph-bluestore-tool bluefs-log-dump: \n")
-                    log.info(out)
-                    for line in out.splitlines():
-                        if "op_file_update  file(ino 27" in line:
-                            assert "20000 extents" in line, "expected extents not found"
-                            ino_lines.append(line)
-                    log.info("Relevant log lines from bluefs_log_dump \n \n")
-                    log.info(ino_lines)
-                except Exception as Err:
-                    log.error(
-                        "Expected failure, OSD.%s has failed with error : \n%s"
-                        % (prim_osd, str(Err))
-                    )
-                    log.exception(Err)
-                down_osds = rados_obj.get_osd_list(status="down")
-                log.info("Down OSDs: %s " % down_osds)
-
+                # to-do: add validation to check ceph assert during OSD restart when upgrading to RHCS 7.1z2
+                # currently not possible as two-step upgrade is not supported with framework
             if _config.get("verify_fix"):
                 # now that cluster has been upgraded to the fixed build, ensure all OSDs are UP
                 # and cluster is in HEALTH OK State.
@@ -297,8 +245,6 @@ def run(ceph_cluster, **kw):
         except Exception as e:
             log.error(f"Failed with exception: {e.__doc__}")
             log.exception(e)
-            # log cluster health
-            rados_obj.log_cluster_health()
             return 1
         finally:
             log.info(
@@ -319,15 +265,7 @@ def run(ceph_cluster, **kw):
             # log cluster health
             rados_obj.log_cluster_health()
             # check for crashes after test execution
-            test_end_time = get_cluster_timestamp(rados_obj.node)
-            log.debug(
-                f"Test workflow completed. Start time: {start_time}, End time: {test_end_time}"
-            )
-
-            if rados_obj.check_crash_status(
-                start_time=start_time, end_time=test_end_time
-            ):
-                log.error("Test passed as expected crash was found")
-                return 0
-        log.error("Test failed as expected crash was not found")
-        return 1
+            if rados_obj.check_crash_status():
+                log.error("Test failed due to crash at the end of test")
+                return 1
+        return 0
