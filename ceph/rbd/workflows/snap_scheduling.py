@@ -39,16 +39,9 @@ def add_snapshot_scheduling(rbd, **kw):
         if namespace:
             group_kw["namespace"] = namespace
         out, err = rbd.mirror.group.snapshot.schedule.add_(**group_kw)
-
-    elif level == "namespace":
-        if namespace:
-            namespace_kw = {"pool": pool, "interval": interval, "namespace": namespace}
-            out, err = rbd.mirror.snapshot.schedule.add_(**namespace_kw)
-        else:
-            # Default namespace: treat as image-level schedule
-            image_kw = {"pool": pool or "rbd", "image": image, "interval": interval}
-            out, err = rbd.mirror.snapshot.schedule.add_(**image_kw)
-
+    elif level == "namespace" and kw.get("namespace", ""):
+        namespace_kw = {"pool": pool, "interval": interval, "namespace": namespace}
+        out, err = rbd.mirror.snapshot.schedule.add_(**namespace_kw)
     else:
         # Default case: treat it as image-level snapshot schedule
         # If pool is not specified, assume default pool "rbd"
@@ -63,7 +56,7 @@ def add_snapshot_scheduling(rbd, **kw):
     return out, err
 
 
-def remove_snapshot_scheduling(rbd, **kw):
+def verify_snapshot_schedule(rbd, pool, image, interval="1m", **kw):
     """
     Remove snapshot scheduling from an rbd mirror cluster
 
@@ -247,6 +240,35 @@ def verify_snapshot_schedule(
                 )
                 return 1
 
+        output, err = rbd.mirror.image.status(**status_spec)
+        if err:
+            log.error(
+                f"Error while fetching mirror image status for image {pool}/{image}"
+            )
+            return 1
+        json_dict = json.loads(output)
+        log.info(f"Image status : \n {json_dict}")
+        snapshot_ids = [i["id"] for i in json_dict.get("snapshots")]
+        log.info(f"snapshot_ids Before : {snapshot_ids}")
+        interval_int = int(interval[:-1])
+        time.sleep(interval_int * 120)
+        output, err = rbd.mirror.image.status(**status_spec)
+        if err:
+            log.error(
+                f"Error while fetching mirror image status for image {pool}/{image}"
+            )
+            return 1
+        json_dict = json.loads(output)
+        log.info(f"Image status : \n {json_dict}")
+        snapshot_ids_1 = [i["id"] for i in json_dict.get("snapshots")]
+        log.info(f"snapshot_ids After : {snapshot_ids_1}")
+        if snapshot_ids != snapshot_ids_1:
+            log.info(
+                f"Snapshot schedule verification successful for image {pool}/{image}"
+            )
+            return 0
+        log.error(f"Snapshot schedule verification failed for image {pool}/{image}")
+        return 1
     except Exception as e:
         log.error(
             "Snapshot schedule verification failed for {0}/{1}{2} with error: {3}".format(

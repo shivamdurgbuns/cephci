@@ -324,37 +324,33 @@ def bootstrap_and_add_peers(rbd_primary, rbd_secondary, **kw):
                 "pool": poolname,
                 "remote-cluster-spec": f"{rbd_client}@{primary_cluster_name}",
             }
-
-    if kw.get("namespace_mirror_type") == "non-default_to_non-default":
-        out = rbd_primary.mirror.pool.info(
-            pool=poolname,
-            namespace=kw["namespace"],
-            format="json",
-            cluster=ceph_cluster_primary,
+    primary_pool_info = json.loads(
+        rbd_primary.mirror.pool.info(
+            pool=poolname, format="json", cluster=ceph_cluster_primary
         )[0]
-        res_text = str(out).strip("'<>() ").replace("'", '"')
-        primary_pool_info = json.loads(res_text)
-
-        out = rbd_secondary.mirror.pool.info(
-            pool=poolname,
-            namespace=kw["remote_namespace"],
-            format="json",
-            cluster=ceph_cluster_secondary,
+    )
+    secondary_pool_info = json.loads(
+        rbd_secondary.mirror.pool.info(
+            pool=poolname, format="json", cluster=ceph_cluster_secondary
         )[0]
-        res_text = str(out).strip("'<>() ").replace("'", '"')
-        secondary_pool_info = json.loads(res_text)
+    )
 
-    else:
-        primary_pool_info = json.loads(
-            rbd_primary.mirror.pool.info(
-                pool=poolname, format="json", cluster=ceph_cluster_primary
-            )[0]
-        )
-        secondary_pool_info = json.loads(
-            rbd_secondary.mirror.pool.info(
-                pool=poolname, format="json", cluster=ceph_cluster_secondary
-            )[0]
-        )
+    primary_peer_info = value(
+        key="peers",
+        dictionary=primary_pool_info,
+    )
+    log.info(primary_peer_info)
+    secondary_peer_info = value(
+        key="peers",
+        dictionary=secondary_pool_info,
+    )
+    log.info(secondary_peer_info)
+    if primary_peer_info.lower() not in [
+        "none",
+        "",
+        None,
+    ] and secondary_peer_info.lower() not in ["none", "", None]:
+        log.info("Peers were successfully added")
 
         primary_peer_info = value(
             key="peers",
@@ -377,6 +373,32 @@ def bootstrap_and_add_peers(rbd_primary, rbd_secondary, **kw):
             log.error("Peers were not added")
 
     if kw.get("mirror_level") == "namespace":
+        if (
+            value(key="remote_namespace", dictionary=primary_pool_info)
+            != kw["remote_namespace"]
+        ):
+            raise Exception(
+                "Remote namespace on the primary cluster does not match with that of secondary"
+            )
+        if (
+            value(key="remote_namespace", dictionary=secondary_pool_info)
+            != kw["namespace"]
+        ):
+            raise Exception(
+                "Remote namespace on the secondary cluster does not match with that of primary"
+            )
+        if kw["namespace_mirror_type"] == "non-default_to_default":
+            if value(key="mode", dictionary=primary_pool_info) != "init-only":
+                raise Exception(
+                    "Mode is not in init-only on the primary side for non-default to default namespace mirroring"
+                )
+        if kw["namespace_mirror_type"] == "default_to_non-default":
+            if value(key="mode", dictionary=secondary_pool_info) != "init-only":
+                raise Exception(
+                    "Mode is not in init-only on the secondary side for default to non-default namespace mirroring"
+                )
+
+    if kw["mirror_level"] == "namespace":
         if (
             value(key="remote_namespace", dictionary=primary_pool_info)
             != kw["remote_namespace"]
@@ -445,7 +467,7 @@ def config_mirror(rbd_primary, rbd_secondary, is_secondary=False, **kw):
                 # Allow some other namespace to be mirrored to the default namespace of the remote pool
                 enable_config.update({"mode": "init-only"})
                 out = rbd_primary.mirror.pool.enable(**enable_config)
-                log.info("Output of RBD mirror pool enable: %s", out)
+                log.info("Output of RBD mirror pool enable: " + out)
                 enable_namespace_mirroring(
                     rbd_primary, rbd_secondary, poolname, **namespace_config
                 )
@@ -455,7 +477,7 @@ def config_mirror(rbd_primary, rbd_secondary, is_secondary=False, **kw):
                 enable_config.update({"mode": "init-only"})
                 enable_config.update({"cluster": ceph_cluster_secondary})
                 out = rbd_secondary.mirror.pool.enable(**enable_config)
-                log.info("Output of RBD mirror pool enable: %s", out)
+                log.info("Output of RBD mirror pool enable: " + out)
                 enable_namespace_mirroring(
                     rbd_primary, rbd_secondary, poolname, **namespace_config
                 )
@@ -573,14 +595,13 @@ def enable_image_mirroring(primary_config, secondary_config, **kw):
     else:
         sec_image_spec = f"{pool}/{image}"
     with parallel() as p:
-        if kw.get("way") != "one-way":
-            p.spawn(
-                wait_for_status,
-                rbd=rbd_primary,
-                cluster_name=primary_cluster.name,
-                imagespec=pri_image_spec,
-                state_pattern="up+stopped",
-            )
+        p.spawn(
+            wait_for_status,
+            rbd=rbd_primary,
+            cluster_name=primary_cluster.name,
+            imagespec=pri_image_spec,
+            state_pattern="up+stopped",
+        )
         p.spawn(
             wait_for_status,
             rbd=rbd_secondary,
