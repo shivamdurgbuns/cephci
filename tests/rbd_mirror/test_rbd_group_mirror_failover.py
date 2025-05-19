@@ -1,6 +1,6 @@
 """
 Module to verify :
-  -  Verify failover failback during orderly and non-orderly shutdown
+  -  Verify failover failback during orderly and non-orderly shutdown (without namespace)
 
 Test case covered:
 CEPH-83613277 - Verify failover failback during orderly and non-orderly shutdown
@@ -12,7 +12,7 @@ Pre-requisites :
 
 Test Case Flow:
 Step 1: Deploy Two ceph cluster on version 8.1 or above
-Step 2: Create RBD pool ‘pool_1’ on both sites with/without namespace
+Step 2: Create RBD pool ‘pool_1’ on both sites
 Step 3: Enable Image mode mirroring on pool_1 on both sites
 Step 4: Bootstrap the storage cluster peers (Two-way)
 Step 5: Create 2 RBD images in pool_1
@@ -37,11 +37,10 @@ Step 23: demote site-b
 Step 24: Perform resync
 Step 25: Validate md5sum should match both clusters
 Step 26: Verify group mirror status
-Step 27: Repeat above on EC pool with or without namespace
+Step 27: Repeat above on EC pool
 Step 28: Cleanup the images, file and pools
 """
 
-import random
 import time
 from copy import deepcopy
 
@@ -54,7 +53,6 @@ from ceph.rbd.workflows.group_mirror import (
     wait_for_idle,
 )
 from ceph.rbd.workflows.krbd_io_handler import krbd_io_handler
-from ceph.rbd.workflows.namespace import enable_namespace_mirroring
 from utility.log import Log
 
 log = Log(__name__)
@@ -125,20 +123,12 @@ def test_group_mirroring_failover(
             image_spec = []
             for image, image_config in pool_config.items():
                 if "image" in image:
-                    if "namespace" in pool_config:
-                        image_spec.append(
-                            pool + "/" + pool_config.get("namespace") + "/" + image
-                        )
-                        enable_namespace_mirroring(
-                            rbd_primary, rbd_secondary, pool, **pool_config
-                        )
-                    else:
-                        image_spec.append(pool + "/" + image)
+                    image_spec.append(pool + "/" + image)
             image_spec_copy = deepcopy(image_spec)
             io_config["rbd_obj"] = rbd_primary
             io_config["client"] = client_primary
             io_config["config"]["image_spec"] = image_spec_copy
-            io, err = krbd_io_handler(**io_config)
+            (io, err) = krbd_io_handler(**io_config)
             if err:
                 raise Exception("Map, mount and run IOs failed for " + str(image_spec))
             else:
@@ -194,7 +184,7 @@ def test_group_mirroring_failover(
                 )
 
             # 17: Perform group demote on site-a and group promote on site-b
-            out, err = rbd_primary.mirror.group.demote(**{"group-spec": group_spec})
+            (out, err) = rbd_primary.mirror.group.demote(**{"group-spec": group_spec})
             if err:
                 raise Exception("Failed to demote group on site-A: " + str(err))
             log.info("Demoted " + group_spec + " on site-A ")
@@ -213,7 +203,9 @@ def test_group_mirroring_failover(
                 "Group states reached 'up+unknown' on site-A and 'up+unknown' on site-B"
             )
 
-            out, err = rbd_secondary.mirror.group.promote(**{"group-spec": group_spec})
+            (out, err) = rbd_secondary.mirror.group.promote(
+                **{"group-spec": group_spec}
+            )
             if err:
                 raise Exception("Failed to promote group on site-B: " + str(err))
             log.info("Promoted " + group_spec + " on site-B ")
@@ -256,7 +248,7 @@ def test_group_mirroring_failover(
             io_config["client"] = client_secondary
             image_spec_copy = deepcopy(image_spec)
             io_config["config"]["image_spec"] = image_spec_copy
-            io, err = krbd_io_handler(**io_config)
+            (io, err) = krbd_io_handler(**io_config)
             if err:
                 raise Exception("Map, mount and run IOs failed for " + str(image_spec))
             else:
@@ -280,7 +272,7 @@ def test_group_mirroring_failover(
                     f"site-B : {md5sum_after_failover_site_b}"
                 )
             # 21: demote group on site-b and promote group on site-a
-            out, err = rbd_secondary.mirror.group.demote(**{"group-spec": group_spec})
+            (out, err) = rbd_secondary.mirror.group.demote(**{"group-spec": group_spec})
             if err:
                 raise Exception("Failed to demote group on site-B " + str(err))
             log.info("Demoted " + group_spec + " on site-B ")
@@ -298,7 +290,7 @@ def test_group_mirroring_failover(
             log.info(
                 "Group states reached 'up+unknown' on site-A and 'up+unknown' on site-B"
             )
-            out, err = rbd_primary.mirror.group.promote(**{"group-spec": group_spec})
+            (out, err) = rbd_primary.mirror.group.promote(**{"group-spec": group_spec})
             if err:
                 raise Exception("Failed to promote group on site-A " + str(err))
             log.info("Promoted " + group_spec + " on site-A ")
@@ -329,7 +321,7 @@ def test_group_mirroring_failover(
                     )
                 )
             # 25: force promote on site-b
-            out, err = rbd_secondary.mirror.group.promote(
+            (out, err) = rbd_secondary.mirror.group.promote(
                 **{"group-spec": group_spec, "force": True}
             )
             if err:
@@ -354,14 +346,14 @@ def test_group_mirroring_failover(
             io_config["client"] = client_secondary
             image_spec_copy = deepcopy(image_spec)
             io_config["config"]["image_spec"] = image_spec_copy
-            io, err = krbd_io_handler(**io_config)
+            (io, err) = krbd_io_handler(**io_config)
             if err:
                 raise Exception("Map, mount and run IOs failed for " + str(image_spec))
             else:
                 log.info("Map, mount and IOs successful for " + str(image_spec))
 
             # 28: demote site-b
-            out, err = rbd_secondary.mirror.group.demote(**{"group-spec": group_spec})
+            (out, err) = rbd_secondary.mirror.group.demote(**{"group-spec": group_spec})
             if err:
                 raise Exception("Failed to demote group on site-B " + str(err))
             log.info("Demoted " + group_spec + " on site-B ")
@@ -390,7 +382,7 @@ def test_group_mirroring_failover(
                 )
 
             # Perform resync
-            out, err = rbd_secondary.mirror.group.resync(**{"group-spec": group_spec})
+            (out, err) = rbd_secondary.mirror.group.resync(**{"group-spec": group_spec})
             if err:
                 raise Exception("Failed to resync group on site-B " + str(err))
             log.info("Resync group done for " + group_spec + " on site-B ")
@@ -438,7 +430,7 @@ def test_group_mirroring_failover(
 
 def run(**kw):
     """
-    This test verifies failover failback during orderly and non-orderly shutdown
+    This test verifies failover failback during orderly and non-orderly shutdown (without namespace)
     Args:
         kw: test data
     Returns:
@@ -447,13 +439,7 @@ def run(**kw):
     """
     try:
         pool_types = ["rep_pool_config", "ec_pool_config"]
-        grouptypes = ["single_pool_without_namespace", "single_pool_with_namespace"]
-        if not kw.get("config").get("grouptype"):
-            for pooltype in pool_types:
-                group_type = grouptypes.pop(random.randrange(len(grouptypes)))
-                kw.get("config").get(pooltype).update({"grouptype": group_type})
-                log.info("Choosing Group type on %s - %s", pooltype, group_type)
-
+        kw.get("config").update({"grouptype": kw.get("config").get("grouptype")})
         mirror_obj = initial_mirror_config(**kw)
         mirror_obj.pop("output", [])
         for val in mirror_obj.values():
