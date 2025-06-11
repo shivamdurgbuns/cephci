@@ -940,7 +940,7 @@ class HighAvailability:
         LOG.info("All namespaces are listed at Client(s)")
         return True
 
-    def prepare_io_execution(self, io_clients):
+    def prepare_io_execution(self, io_clients, return_clients=False):
         """Prepare FIO Execution.
 
         initiators:                             # Configure Initiators with all pre-req
@@ -956,6 +956,8 @@ class HighAvailability:
             client.connect_targets(io_client)
             if client not in self.clients:
                 self.clients.append(client)
+        if return_clients:
+            return self.clients
 
     def fetch_namespaces(self, gateway, failed_ana_grp_ids=[], get_list=False):
         """Fetch all namespaces for failed gateways.
@@ -1000,7 +1002,7 @@ class HighAvailability:
         return namespaces
 
     @retry((IOError, TimeoutError, CommandFailed), tries=7, delay=2)
-    def validate_io(self, namespaces):
+    def validate_io(self, namespaces, negative=False):
         """Validate Continuous IO on namespaces.
 
         - Collect rbd disk usage info for each rbd image.
@@ -1042,8 +1044,20 @@ class HighAvailability:
                 )
                 LOG.info(f"[ {subsys}|{pool_img} ] RBD DU samples - {res}")
                 if not validate_incremetal_io(res):
+                    if negative:
+                        LOG.info(
+                            f"[ {subsys}|{pool_img} ] IO is not progressing as expected - {res}"
+                        )
+                        continue
                     raise IOError(
                         f"[ {subsys}|{pool_img} ] IO is not progressing - {res}"
+                    )
+                if negative:
+                    LOG.error(
+                        f"[ {subsys}|{pool_img} ] IO is progressing as expected - {res}"
+                    )
+                    raise IOError(
+                        f"[ {subsys}|{pool_img} ] IO is progressing as expected - {res}"
                     )
                 LOG.info(f"IO validation for {subsys}|{pool_img} is successful.")
 
@@ -1165,7 +1179,7 @@ class HighAvailability:
                             )
             else:
                 if (
-                    expected_visibility == "False"
+                    not expected_visibility
                 ):  # If expected visibility is False, devices should be empty
                     # Determine if devices list is empty (no Namespaces in any Subsystem)
                     devices_json_empty = (
@@ -1187,7 +1201,7 @@ class HighAvailability:
                     else:
                         LOG.info(f"Validated - no devices found on {node}")
                 elif (
-                    expected_visibility == "True"
+                    expected_visibility
                 ):  # If expected visibility is True, devices should not be empty
                     devices_json_empty = (
                         all(
@@ -1226,7 +1240,6 @@ class HighAvailability:
                                                 LOG.info(
                                                     f"Namespace: {namespace}, SerialNumber: {serial_number}"
                                                 )
-
                         LOG.info(
                             f"Validated - {len(devices_json)} devices found on {node}"
                         )
@@ -1287,13 +1300,15 @@ class HighAvailability:
 
         else:
             # Validate visibility based on the expected value (for non-add/del host commands)
-            ns_visibility = str(ns_visibility)
+            # ns_visibility = str(ns_visibility)
             LOG.info(command)
-            if ns_visibility.lower() == expected_visibility.lower():
+            # if ns_visibility.lower() == expected_visibility.lower():
+            if ns_visibility == expected_visibility:
                 LOG.info(
                     f"Validated - Namespace {nsid} has correct visibility: {ns_visibility}"
                 )
             else:
+                # LOG.info("esle")
                 LOG.error(
                     f"NS {nsid} of {subnqn} has wrong visibility.Expected {expected_visibility} got{ns_visibility}"
                 )
