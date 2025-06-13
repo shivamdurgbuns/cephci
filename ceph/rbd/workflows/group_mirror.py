@@ -17,16 +17,12 @@ def verify_group_mirroring_state(rbd, mirror_state, **group_kw):
        **group_kw: Group spec <pool_name>/<group_name>
     """
     if mirror_state == "Disabled":
-        group_mirror_status, err = rbd.mirror.group.status(**group_kw)
-        known_messages = [
-            "mirroring disabled",
-            "mirroring not enabled on the group",
-        ]
-        if err and any(msg in err for msg in known_messages):
+        (group_mirror_status, err) = rbd.mirror.group.status(**group_kw)
+        if err and "mirroring not enabled on the group" in err:
             return True
         return False
     if mirror_state == "Enabled":
-        group_info, err = rbd.group.info(**group_kw, format="json")
+        (group_info, err) = rbd.group.info(**group_kw, format="json")
         if err:
             log.error("Error in group info: " + err)
             return False
@@ -43,7 +39,7 @@ def verify_group_image_list(rbd, **kw):
         rbd: RBD object
         **kw: Image spec <pool_name>/<image_name>
     """
-    group_image_list, err = rbd.group.image.list(**kw, format="json")
+    (group_image_list, err) = rbd.group.image.list(**kw, format="json")
     if err:
         log.error("Error in group image list: " + err)
         return False
@@ -61,7 +57,7 @@ def enable_group_mirroring_and_verify_state(rbd, **group_kw):
       rbd: RBD object
       **group_kw: Group spec <pool_name>/<group_name>
     """
-    mirror_group_enable_status, err = rbd.mirror.group.enable(**group_kw)
+    (mirror_group_enable_status, err) = rbd.mirror.group.enable(**group_kw)
     if err:
         raise Exception("Error in group mirror enable: " + err)
     if (
@@ -80,7 +76,7 @@ def disable_group_mirroring_and_verify_state(rbd, **group_kw):
       rbd: RBD object
       **group_kw: Group spec <pool_name>/<group_name>
     """
-    group_mirroring_disable_status, err = rbd.mirror.group.disable(**group_kw)
+    (group_mirroring_disable_status, err) = rbd.mirror.group.disable(**group_kw)
     if err:
         raise Exception("Error in group mirror disable: " + err)
     if (
@@ -99,7 +95,7 @@ def add_group_image_and_verify(rbd, **kw):
       rbd: RBD object
       **kw: Group spec <pool_name>/<group_name>
     """
-    group_image_add_status, err = rbd.group.image.add(**kw)
+    (group_image_add_status, err) = rbd.group.image.add(**kw)
     if err:
         raise Exception(
             "Error in group image add for group: " + kw["group-spec"] + " err: " + err
@@ -123,7 +119,7 @@ def remove_group_image_and_verify(rbd, **kw):
       rbd: RBD object
       **kw: Group spec <pool_name>/<group_name>
     """
-    group_image_remove_status, err = rbd.group.image.rm(**kw)
+    (group_image_remove_status, err) = rbd.group.image.rm(**kw)
     if err:
         raise Exception("Error in group image remove: " + err)
     if (
@@ -145,7 +141,6 @@ def create_group_add_images(rbd, **kw):
       pool_spec: pool spec (with or without namespace)
     """
     res = {}
-    cnt = 0
     for i in range(0, kw["no_of_group"]):
         group_spec = f"{kw['pool_spec']}/group{i+1}"
         group_create, err = rbd.group.create(**{"group-spec": group_spec})
@@ -155,8 +150,7 @@ def create_group_add_images(rbd, **kw):
         # Create Image and add to the group
         group_image = []
         for i in range(0, kw["no_of_images_in_each_group"]):
-            cnt = cnt + 1
-            image_spec = f"{kw['pool_spec']}/image{cnt+1}"
+            image_spec = f"{kw['pool_spec']}/image{i+1}"
             image_create, err = rbd.create(
                 **{
                     "image-spec": image_spec,
@@ -177,7 +171,7 @@ def create_group_add_images(rbd, **kw):
                 + group_spec
             )
             group_image.append(image_spec)
-        res[group_spec] = group_image
+            res[group_spec] = group_image
     return res
 
 
@@ -226,7 +220,7 @@ def group_mirror_status_verify(
         state_pattern=secondary_state,
     )
     if global_id is True:
-        group_mirror_status, err = rbd_primary.mirror.group.status(
+        (group_mirror_status, err) = rbd_primary.mirror.group.status(
             **group_kw, format="json"
         )
         if err:
@@ -236,7 +230,7 @@ def group_mirror_status_verify(
         log.info("Primary cluster group mirror status: " + str(group_mirror_status))
         primary_global_id = json.loads(group_mirror_status)["global_id"]
 
-        group_mirror_status, err = rbd_secondary.mirror.group.status(
+        (group_mirror_status, err) = rbd_secondary.mirror.group.status(
             **group_kw, format="json"
         )
         if err:
@@ -261,7 +255,7 @@ def wait_for_idle(rbd, **group_kw):
     retry = 0
     while retry < 60:
         time.sleep(10)
-        group_mirror_status, err = rbd.mirror.group.status(**group_kw, format="json")
+        (group_mirror_status, err) = rbd.mirror.group.status(**group_kw, format="json")
         group_mirror_status = str(group_mirror_status).strip("'<>() ").replace("'", '"')
         group_mirror_status = json.loads(group_mirror_status)
         cnt = 0
@@ -374,7 +368,7 @@ def verify_group_snapshot_ls(rbd, group_spec, interval, **status_spec):
             err,
         )
         return 1
-    out = str(out).strip("'<>() ").replace("'", '"')
+
     schedule_list = json.loads(out)
     schedule_present = [
         schedule for schedule in schedule_list if schedule["interval"] == interval
@@ -386,164 +380,3 @@ def verify_group_snapshot_ls(rbd, group_spec, interval, **status_spec):
             interval,
         )
         return 1
-
-
-def get_snap_state_by_snap_id(rbd, snapshot_id, **status_spec):
-    """
-    This function will return snapshot_state(creating/created) for a given snapshot id
-    Args:
-        rbd: rbd object
-        snapshot_id: Snapshot job id
-        status_spec: pool, namespace and group details
-    Returns:
-        Snapshot state (str), when successful
-        raise Exception, if fails
-    """
-    out, err = rbd.group.snap.list(**status_spec)
-    if err:
-        raise Exception(
-            "Error while fetching snapshot list for group  %s, %s",
-            status_spec["group"],
-            err,
-        )
-    snapshot_list = json.loads(out)
-    for snap in snapshot_list:
-        if snap["namespace"]["type"] == "mirror" and snap["id"] == snapshot_id:
-            snapshot_state = snap["state"]
-            break
-    return snapshot_state
-
-
-def get_mirror_group_snap_copied_status(rbd, snapshot_id, **status_spec):
-    """
-    This function will return True if the mirror group snapshot identified
-    by snapshot_id is fully copied on the secondary.
-
-    Args:
-        rbd: rbd object
-        snapshot_id: Snapshot job id
-        status_spec: pool, namespace and group details
-    Returns:
-        True if copied, False if not copied
-        raise Exception, if fails
-    """
-    out, err = rbd.group.snap.list(**status_spec)
-    if err:
-        raise Exception(
-            f"Error while fetching snapshot list for the group spec={status_spec}: {err}"
-        )
-
-    snapshot_list = json.loads(out)
-    log.info(f"Snapshot list: {snapshot_list}")
-
-    for snap in snapshot_list:
-        log.info(f"Checking snapshot: {snap}")
-        if str(snap.get("id")) != str(snapshot_id):
-            continue
-
-        ns = snap.get("namespace", {})
-        if ns.get("type") != "mirror":
-            if ns.get("type") != "mirror":
-                raise Exception(f"Snapshot {snapshot_id} is not a mirror snapshot")
-
-        state = snap.get("state")
-        log.info(f"Snapshot {snapshot_id} state={state}")
-
-        # For Ceph 8.x state 'complete' means copied
-        if state == "complete":
-            log.info(
-                f"Ceph 8.x group mirror snap {snapshot_id}: state=complete treated as copied"
-            )
-            return True
-
-        # For Ceph 9.x state 'created' then check 'complete'
-        # field under namespace for snapshot copy status
-        if state == "created":
-            if snap["namespace"]["complete"]:
-                log.info(
-                    f"Ceph 9.x group mirror snap {snapshot_id}: namespace complete=True treated as copied"
-                )
-                return True
-
-        # Any other state
-        log.info(f"Mirror snap {snapshot_id}: state={state} treated as not copied")
-        return False
-
-    raise Exception(f"Snapshot id {snapshot_id} not found in group snapshot list")
-
-
-def get_mirror_group_snap_id(rbd, **status_spec):
-    """
-    This will get first mirror group snapshot id from group snap list CLI
-    Args:
-        rbd: rbd object
-        status_spec: pool, namespace and group details
-    Returns:
-        snapshot id, if successfull
-    """
-    out, err = rbd.group.snap.list(**status_spec)
-    if err:
-        raise Exception(
-            "Error while fetching snapshot list for group  %s, %s",
-            status_spec["group"],
-            err,
-        )
-    snapshot_list = json.loads(out)
-    for snap in snapshot_list:
-        if snap["namespace"]["type"] == "mirror":
-            snapshot_id = snap["id"]
-            break
-    return snapshot_id
-
-
-def wait_till_image_sync_percent(rbd, wait_sync_percent, **group_kw):
-    """
-    Wait till image reach sync_percent
-    Args:
-        rbd: Rbd object
-        wait_sync_percent: Percentage of image sync till which this function has to wait
-        **group_kw: Group spec <pool_name>/<group_name>
-    """
-    retry = 0
-    while retry < 60:
-        group_mirror_status, err = rbd.mirror.group.status(**group_kw, format="json")
-        group_mirror_status = str(group_mirror_status).strip("'<>() ").replace("'", '"')
-        group_mirror_status = json.loads(group_mirror_status)
-        cnt = 0
-        if len(group_mirror_status["peer_sites"][0]["images"]) != 0:
-            sync_started = False
-            for image in group_mirror_status["peer_sites"][0]["images"]:
-                if "PREPARE_REPLAY" in image["description"].split(", ")[-1]:
-                    continue
-                replay_state = json.loads(image["description"].split(", ")[-1])[
-                    "replay_state"
-                ]
-                if replay_state == "idle":
-                    if sync_started is True:
-                        cnt = cnt + 1
-                    else:
-                        continue
-                if replay_state == "syncing":
-                    sync_started = True
-                    syncing_percent = json.loads(image["description"].split(", ")[-1])[
-                        "syncing_percent"
-                    ]
-                    if int(syncing_percent) >= wait_sync_percent:
-                        cnt = cnt + 1
-                    else:
-                        break
-
-            if cnt == len(group_mirror_status["peer_sites"][0]["images"]):
-                break
-            else:
-                time.sleep(5)
-                retry = retry + 1
-        else:
-            time.sleep(5)
-            retry = retry + 1
-    if retry == 60:
-        raise Exception(
-            "Sync percentage is not acheived to be "
-            + wait_sync_percent
-            + " even after 300 seconds"
-        )
