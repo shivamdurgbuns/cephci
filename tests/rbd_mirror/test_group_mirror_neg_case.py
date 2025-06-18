@@ -533,6 +533,134 @@ def test_group_mirror_snapshot_schedule_neg_case(
 
     log.info("Test Consistency group snapshot schedule negative test passed")
 
+    log.info("Test Consistency group negative test passed")
+
+
+def test_group_mirror_snapshot_schedule_neg_case(
+    rbd_primary,
+    rbd_secondary,
+    client_primary,
+    pool_types,
+    **kw,
+):
+    """
+    Exercise Adding removing listing mirror group snapshot schedule when group mirroring is disabled
+    Args:
+        rbd_primary: RBD object of primary cluster
+        rbd_secondary: RBD objevct of secondary cluster
+        client_primary: client node object of primary cluster
+        pool_types: Replication pool or EC pool
+        **kw: any other arguments
+    """
+    for pool_type in pool_types:
+        rbd_config = kw.get("config", {}).get(pool_type, {})
+        multi_pool_config = deepcopy(getdict(rbd_config))
+        log.info("Running test CEPH-83620497 for %s", pool_type)
+
+        for pool, pool_config in multi_pool_config.items():
+            group_config = {}
+            if "data_pool" in pool_config.keys():
+                _ = pool_config.pop("data_pool")
+
+            group_spec = pool_config.get("group-spec")
+            group_config.update({"group-spec": group_spec})
+            for image, image_config in pool_config.items():
+                if "image" in image:
+                    if "namespace" in pool_config:
+                        image_spec = (
+                            pool + "/" + pool_config.get("namespace") + "/" + image
+                        )
+                    else:
+                        image_spec = pool + "/" + image
+
+            if "namespace" in pool_config:
+                enable_namespace_mirroring(
+                    rbd_primary, rbd_secondary, pool, **pool_config
+                )
+
+            # Get Group Mirroring Status
+            (group_mirror_status, err) = rbd_primary.mirror.group.status(**group_config)
+            if err:
+                if "mirroring not enabled on the group" in err:
+                    mirror_state = "Disabled"
+                else:
+                    raise Exception("Getting group mirror status failed : " + str(err))
+            else:
+                mirror_state = "Enabled"
+            log.info(
+                "Group "
+                + group_config["group-spec"]
+                + " mirroring state is "
+                + mirror_state
+            )
+
+            # Add the group mirror snapshot schedule should fail
+            (group_info_status, err) = rbd_primary.group.info(
+                **group_config, format="json"
+            )
+            group_id = json.loads(group_info_status)["group_id"]
+
+            snap_schedule_config = {
+                "pool": pool,
+                "image": image_spec.split("/")[-1],
+                "level": "group",
+                "group": pool_config.get("group"),
+                "interval": "1m",
+            }
+            if "namespace" in pool_config:
+                snap_schedule_config.update({"namespace": pool_config.get("namespace")})
+            out, err = add_snapshot_scheduling(rbd_primary, **snap_schedule_config)
+            if err and (f"group {group_id} is not in snapshot mirror mode" in err):
+                log.info(
+                    "Successfully Verified snapshot schedule cannot be added when group mirroring is disabled"
+                )
+            else:
+                log.info(err)
+                raise Exception(
+                    "Group snapshot schedule of 1m should not be added when group mirorring is disabled"
+                )
+
+            # Removing the group mirror snapshot schedule should fail
+            snap_schedule_config.pop("image")
+            snap_schedule_config.pop("level")
+            out, err = rbd_primary.mirror.group.snapshot.schedule.remove_(
+                **snap_schedule_config
+            )
+            if err and f"group {group_id} is not in snapshot mirror mode" in err:
+                log.info(
+                    "Successfully Verified snapshot schedule cannot be removed when group mirroring is disabled"
+                )
+            else:
+                raise Exception(
+                    "Group snapshot schedule of 1m should not be removed when group mirorring is disabled"
+                )
+
+            # Listing the group mirror snapshot schedule should FAIL
+            status_spec = {
+                "pool": pool,
+                "group": pool_config.get("group"),
+                "format": "json",
+            }
+            if "namespace" in pool_config:
+                status_spec.update({"namespace": pool_config.get("namespace")})
+            else:
+                group_spec = pool + "/" + pool_config.get("group")
+
+            try:
+                verify_group_snapshot_ls(rbd_primary, group_spec, "1m", **status_spec)
+            except Exception as e:
+                if f"group {group_id} is not in snapshot mirror mode" in str(e):
+                    log.info(
+                        "Successfully Verified snapshot schedule cannot be listed "
+                        "when group mirroring is disabled"
+                    )
+                else:
+                    raise Exception(
+                        "Group snapshot schedule of 1m should not be listed when group mirorring is disabled"
+                    )
+
+    log.info("Test Consistency group snapshot schedule negative test passed")
+
 
 def run(**kw):
     """
