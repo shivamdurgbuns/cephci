@@ -70,7 +70,6 @@ tests:
       abort-on-fail: false
       config:
         rbd_pool: rbd2
-        nvme_metadata_pool: rbd2
         gw_group: gw_group1
         do_not_create_image: true
         rep-pool-only: true
@@ -97,7 +96,7 @@ tests:
             listeners: [node6, node7, node8, node9]
             allow_host: "*"
           - nqn: nqn.2016-06.io.spdk:cnode2
-            serial: 2
+            serial: 1
             max_ns: 100
             bdevs:
             - count: 10
@@ -123,7 +122,6 @@ tests:
       abort-on-fail: false
       config:
         rbd_pool: rbd2
-        nvme_metadata_pool: rbd2
         gw_group: gw_group1
         do_not_create_image: true
         rep-pool-only: true
@@ -149,7 +147,7 @@ tests:
             listeners: [node6, node7, node8, node9]
             allow_host: "*"
           - nqn: nqn.2016-06.io.spdk:cnode2
-            serial: 2
+            serial: 1
             bdevs:
             - count: 5
               size: 5G
@@ -157,7 +155,7 @@ tests:
             listeners: [node6, node7, node8, node9]
             allow_host: "*"
           - nqn: nqn.2016-06.io.spdk:cnode3
-            serial: 3
+            serial: 1
             bdevs:
             - count: 5
               size: 5G
@@ -165,7 +163,7 @@ tests:
             listeners: [node6, node7, node8, node9]
             allow_host: "*"
           - nqn: nqn.2016-06.io.spdk:cnode4
-            serial: 4
+            serial: 1
             bdevs:
             - count: 5
               size: 5G
@@ -191,7 +189,6 @@ tests:
       abort-on-fail: false
       config:
         rbd_pool: rbd2
-        nvme_metadata_pool: rbd2
         gw_group: gw_group1
         do_not_create_image: true
         rep-pool-only: true
@@ -216,7 +213,7 @@ tests:
             listeners: [node6, node7]
             allow_host: "*"
           - nqn: nqn.2016-06.io.spdk:cnode2
-            serial: 2
+            serial: 1
             max_ns: 100
             bdevs:
             - count: 10
@@ -246,7 +243,6 @@ tests:
       abort-on-fail: false
       config:
         rbd_pool: rbd2
-        nvme_metadata_pool: rbd2
         gw_group: gw_group1
         do_not_create_image: true
         rep-pool-only: true
@@ -276,7 +272,7 @@ tests:
             listeners: [node6, node7, node8, node9, node10, node11, node12, node13]
             allow_host: "*"
           - nqn: nqn.2016-06.io.spdk:cnode2
-            serial: 2
+            serial: 1
             bdevs:
             - count: 5
               size: 5G
@@ -284,7 +280,7 @@ tests:
             listeners: [node6, node7, node8, node9, node10, node11, node12, node13]
             allow_host: "*"
           - nqn: nqn.2016-06.io.spdk:cnode3
-            serial: 3
+            serial: 1
             bdevs:
             - count: 5
               size: 5G
@@ -292,7 +288,7 @@ tests:
             listeners: [node6, node7, node8, node9, node10, node11, node12, node13]
             allow_host: "*"
           - nqn: nqn.2016-06.io.spdk:cnode4
-            serial: 4
+            serial: 1
             bdevs:
             - count: 5
               size: 5G
@@ -317,7 +313,6 @@ tests:
       abort-on-fail: false
       config:
         rbd_pool: rbd2
-        nvme_metadata_pool: rbd2
         gw_group: gw_group1
         do_not_create_image: true
         rep-pool-only: true
@@ -344,7 +339,7 @@ tests:
             listeners: [node4, node5, node6, node7]
             allow_host: "*"
           - nqn: nqn.2016-06.io.spdk:cnode2
-            serial: 2
+            serial: 1
             max_ns: 2048
             bdevs:
             - count: 10
@@ -381,6 +376,8 @@ tests:
       module: test_ceph_nvmeof_loadbalancing.py
       name: namespace addition and deletion
       polarion-id: CEPH-83608835
+<<<<<<< HEAD
+=======
 
   - test:
       abort-on-fail: true
@@ -434,3 +431,61 @@ tests:
       module: test_ceph_nvmeof_loadbalancing.py
       name: Test load balancing for namespace addition and deletion with same LB group.
       polarion-id: CEPH-83608838
+
+  - test:
+      abort-on-fail: true
+      config:
+        command: apply_spec
+        gw_nodes:
+          - node3
+          - node4
+          - node5
+          - node6
+        rbd_pool: rbd
+        gw_group: gw_group1
+        subsystems:
+          - nqn: nqn.2016-06.io.spdk:cnode1
+            max_ns: 1024
+            listener_port: 4420
+            listeners:
+              - node3
+              - node4
+              - node5
+              - node6
+            allow_host: "*"
+          - nqn: nqn.2016-06.io.spdk:cnode2
+            max_ns: 1024
+            listener_port: 4420
+            listeners:
+              - node3
+              - node4
+              - node5
+              - node6
+            allow_host: "*"
+          - nqn: nqn.2016-06.io.spdk:cnode3
+            max_ns: 1024
+            listener_port: 4420
+            listeners:
+              - node3
+              - node4
+              - node5
+              - node6
+            allow_host: "*"
+          - nqn: nqn.2016-06.io.spdk:cnode4
+            max_ns: 1024
+            listener_port: 4420
+            listeners:
+              - node3
+              - node4
+              - node5
+              - node6
+            allow_host: "*"
+        test_case: CEPH-83609769
+        cleanup:
+          - pool
+          - gateway
+      desc: Test disabling auto namespace load balancing in a GW group
+      destroy-cluster: false
+      module: test_ceph_nvmeof_loadbalancing.py
+      name: Test disabling auto namespace load balancing in a GW group
+      polarion-id: CEPH-83609769
