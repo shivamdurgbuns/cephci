@@ -52,7 +52,6 @@ import time
 
 import yaml
 
-from ceph.ceph_admin.helper import check_service_exists
 from utility import utils
 from utility.log import Log
 from utility.utils import (
@@ -62,7 +61,6 @@ from utility.utils import (
     retain_bucket_pol_at_archive,
     set_config_param,
     setup_cluster_access,
-    setup_gklm_prereq,
     test_bucket_stats_with_archive,
     test_sync_via_bucket_stats,
     test_user_stats_consistency,
@@ -96,12 +94,9 @@ def run(**kw):
     config["git-url"] = config.get(
         "git-url", "https://github.com/red-hat-storage/ceph-qe-scripts.git"
     )
-    test_data = kw.get("test_data")
-    custom_config = test_data.get("custom-config", {})
 
     set_env = config.get("set-env", False)
     extra_pkgs = config.get("extra-pkgs")
-    git_clone_configs_repo = config.get("git_clone_configs_repo", False)
     install_start_kafka_broker = config.get("install_start_kafka")
     configure_kafka_broker_security = config.get("configure_kafka_security")
     cloud_type = config.get("cloud-type")
@@ -202,21 +197,6 @@ def run(**kw):
             ms_clusters = [primary_client_node, secondary_client_node]
             for cluster_node in ms_clusters:
                 set_config_param(cluster_node)
-
-    if git_clone_configs_repo:
-        for i in range(0, len(primary_rgw_nodes)):
-            utils.clone_configs_repo(primary_rgw_nodes[i].node, repo_name="rgw_configs")
-        for i in range(0, len(secondary_rgw_nodes)):
-            utils.clone_configs_repo(
-                secondary_rgw_nodes[i].node, repo_name="rgw_configs"
-            )
-        if archive_cluster_exists:
-            utils.clone_configs_repo(archive_rgw_node, repo_name="rgw_configs")
-            utils.clone_configs_repo(archive_client_node, repo_name="rgw_configs")
-        if tertiary_cluster_exists:
-            utils.clone_configs_repo(tertiary_rgw_node, repo_name="rgw_configs")
-            utils.clone_configs_repo(tertiary_client_node, repo_name="rgw_configs")
-
     # run the test
     script_name = config.get("script-name")
     config_file_name = config.get("config-file-name")
@@ -257,27 +237,6 @@ def run(**kw):
     if configure_kafka_cluster:
         configure_kafka_cluster_with_security(primary_cluster, cloud_type)
         configure_kafka_cluster_with_security(secondary_cluster, cloud_type)
-
-    setup_gklm_prerequisites = config.get("setup_gklm_prerequisites")
-    if setup_gklm_prerequisites:
-        setup_gklm_prereq(primary_cluster, cloud_type, custom_config)
-        rgw_status = check_service_exists(
-            primary_cluster.get_nodes(role="installer")[0],
-            service_type="rgw",
-            interval=10,
-            timeout=180,
-        )
-        if not rgw_status:
-            raise Exception("rgw service restart failed")
-        setup_gklm_prereq(secondary_cluster, cloud_type, custom_config)
-        rgw_status = check_service_exists(
-            secondary_cluster.get_nodes(role="installer")[0],
-            service_type="rgw",
-            interval=10,
-            timeout=180,
-        )
-        if not rgw_status:
-            raise Exception("rgw service restart failed")
 
     if test_config["config"]:
         log.info("creating custom config")
