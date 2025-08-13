@@ -8,6 +8,13 @@ class Namespace:
         self.base = base
         self.name = "namespace"
 
+    def set_qos(self, **kwargs):
+        """Set QoS for namespace."""
+        return self.run_nvme_cli("set_qos", **kwargs)
+
+    def change_key(self, **kwargs):
+        return self.run_nvme_cli("change_key", **kwargs)
+
     def add(self, **kwargs):
         """Adds namespace for subsystem."""
         return self.base.run_nvme_cli(self.name, "add", **kwargs)
@@ -49,11 +56,3 @@ class Namespace:
     def set_qos(self, **kwargs):
         """Set QoS for a namespace."""
         return self.base.run_nvme_cli(self.name, "set_qos", **kwargs)
-
-    def set_auto_resize(self, **kwargs):
-        """Set auto-resize for a namespace."""
-        return self.base.run_nvme_cli(self.name, "set_auto_resize", **kwargs)
-
-    def refresh_size(self, **kwargs):
-        """Refresh size for a namespace."""
-        return self.base.run_nvme_cli(self.name, "refresh_size", **kwargs)

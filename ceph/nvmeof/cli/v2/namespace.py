@@ -1,14 +1,5 @@
 from ceph.nvmeof.cli.v2.base_cli import BaseCLI
 
-from .common import substitute_keys
-
-KEY_MAP = {
-    "size": "rbd_image_size",
-    # TODO : Fix this once BZ is resolved https://bugzilla.redhat.com/show_bug.cgi?id=2402045
-    "auto-resize-enabled-true": "auto-resize-enabled=true",
-    "auto-resize-enabled-false": "auto-resize-enabled=false",
-}
-
 
 class Namespace:
     """NVMeoF Namespace operations."""
@@ -51,7 +42,6 @@ class Namespace:
         """Lists namespaces under subsystem."""
         return self.base.run_nvme_cli(self.name, "list", **kwargs)
 
-    @substitute_keys(KEY_MAP)
     def resize(self, **kwargs):
         """Resize namespace under subsystem."""
         return self.base.run_nvme_cli(self.name, "resize", **kwargs)
@@ -59,12 +49,3 @@ class Namespace:
     def set_qos(self, **kwargs):
         """Set QoS for a namespace."""
         return self.base.run_nvme_cli(self.name, "set_qos", **kwargs)
-
-    @substitute_keys(KEY_MAP)
-    def set_auto_resize(self, **kwargs):
-        """Set auto-resize for a namespace."""
-        return self.base.run_nvme_cli(self.name, "set_auto_resize", **kwargs)
-
-    def refresh_size(self, **kwargs):
-        """Refresh size for a namespace."""
-        return self.base.run_nvme_cli(self.name, "refresh_size", **kwargs)
