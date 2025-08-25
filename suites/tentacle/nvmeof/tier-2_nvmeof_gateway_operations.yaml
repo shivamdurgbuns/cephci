@@ -116,6 +116,7 @@ tests:
               command: version         # gateway Version
               base_cmd_args:
                 format: json
+                output: log
           - config:
               service: gateway
               command: info             # gateway info
@@ -124,18 +125,22 @@ tests:
               command: get
               base_cmd_args:
                 format: json
+                output: stdio
           - config:
               service: loglevel
               command: set
               base_cmd_args:
                 format: json
+                output: stdio
               args:
                 level: error
+                print: error
           - config:
               service: loglevel
               command: disable
               base_cmd_args:
                 format: json
+                output: stdio
           - config:
               service: subsystem
               command: add              # Subsystem add with groupName
@@ -245,7 +250,6 @@ tests:
                 nsid: 3
                 load-balancing-group: 1
                 rbd-create-image: true
-                read-only: true
                 size: 1G
               validate:
                 omap: true
@@ -387,7 +391,7 @@ tests:
               args:
                 subsystem: nqn.2016-06.io.spdk:cnode2
                 nsid: 4
-                force: 'true'
+                i-am-sure: true
               validate:
                 omap: true
           - config:
@@ -475,7 +479,6 @@ tests:
                 load-balancing-group: 1
                 rbd-create-image: true
                 size: 1G
-                read-only: true
                 no-auto-visible: true
               validate:
                 omap: true
@@ -714,7 +717,7 @@ tests:
               args:
                 subsystem: nqn.2016-06.io.spdk:cnode1.gw-group1
                 nsid: 5
-                force: 'true'
+                i-am-sure: true
               validate:
                 omap: true
           - config:
@@ -746,15 +749,15 @@ tests:
               service: gateway
               command: info
           - config:
-              service: gateway          # CLI Version
+              service: version          # CLI Version
               command: version
               base_cmd_args:
                 format: json
+                output: log
       desc: Validate NVMeoF CLI operations
       destroy-cluster: false
       module: test_nvme_cli.py
       name: Manage nvmeof gateway entities
-      comments: product bug 2402045
       polarion-id: CEPH-83575783
 
   - test:
